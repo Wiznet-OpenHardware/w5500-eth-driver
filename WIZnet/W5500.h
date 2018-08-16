@@ -267,6 +267,8 @@ protected:
     SPI* spi;
     DigitalOut cs;
     DigitalOut reset_pin;
+
+    bool connected_reset_pin;
 };
 
 /*

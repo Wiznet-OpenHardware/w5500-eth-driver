@@ -28,21 +28,21 @@
 #include "DNSClient.h"
  
 // Arduino pin defaults for convenience
-#if !defined(W5500_SPI_MOSI)
-#define W5500_SPI_MOSI   D11
-#endif
-#if !defined(W5500_SPI_MISO)
-#define W5500_SPI_MISO   D12
-#endif
-#if !defined(W5500_SPI_SCLK)
-#define W5500_SPI_SCLK   D13
-#endif
-#if !defined(W5500_SPI_CS)
-#define W5500_SPI_CS     D10
-#endif
-#if !defined(W5500_SPI_RST)
-#define W5500_SPI_RST    NC
-#endif
+//#if !defined(W5500_SPI_MOSI)
+//#define W5500_SPI_MOSI   D11
+//#endif
+//#if !defined(W5500_SPI_MISO)
+//#define W5500_SPI_MISO   D12
+//#endif
+//#if !defined(W5500_SPI_SCLK)
+//#define W5500_SPI_SCLK   D13
+//#endif
+//#if !defined(W5500_SPI_CS)
+//#define W5500_SPI_CS     D10
+//#endif
+//#if !defined(W5500_SPI_RST)
+//#define W5500_SPI_RST    NC
+//#endif
 
 
 /** w5500_socket struct

@@ -34,12 +34,25 @@ WIZnet_Chip* WIZnet_Chip::inst;
 WIZnet_Chip::WIZnet_Chip(PinName mosi, PinName miso, PinName sclk, PinName _cs, PinName _reset):
     cs(_cs), reset_pin(_reset)
 {
-    spi = new SPI(mosi, miso, sclk);
+	connected_reset_pin = false;
+	spi = new SPI(mosi, miso, sclk);
     DBG("SPI interface init...\n");
-    spi->format(32, 0);
+    spi->format(8, 0);
     spi->frequency(MBED_CONF_W5500_SPI_SPEED);
-    cs = 1;
-    reset_pin = 1;
+
+    if (_cs != NC){
+    	cs = 1;
+    }
+    else{
+    	DBG("CS pin is necessary. So You have to set CS pin name\n");
+    }
+
+    if (_reset != NC)
+    {
+    	reset_pin = 1;
+    	connected_reset_pin = true;
+    }
+
     inst = this;
 }
 
@@ -134,10 +147,12 @@ bool WIZnet_Chip::is_connected(int socket)
 void WIZnet_Chip::reset()
 {
 //    reset_pin = 1;
-    reset_pin = 0;
-    wait_us(500); // 500us (w5500)
-    reset_pin = 1;
-    wait_ms(400); // 400ms (w5500)
+    if(connected_reset_pin){
+        reset_pin = 0;
+        wait_us(500); // 500us (w5500)
+        reset_pin = 1;
+        wait_ms(400); // 400ms (w5500)
+    }
 
 #if defined(USE_WIZ550IO_MAC)
     //reg_rd_mac(SHAR, mac); // read the MAC address inside the module
