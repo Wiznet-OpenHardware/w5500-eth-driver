@@ -474,6 +474,7 @@ nsapi_size_or_error_t W5500Interface::socket_send(nsapi_socket_t handle, const v
 {
     DBG("fd: %d\n", SKT(handle)->fd);
     int writtenLen = 0;
+    int ret;
     while (writtenLen < size) {
         int _size =  _w5500.wait_writeable(SKT(handle)->fd, w5500_WAIT_TIMEOUT);
         if (_size < 0) {
@@ -482,7 +483,7 @@ nsapi_size_or_error_t W5500Interface::socket_send(nsapi_socket_t handle, const v
         if (_size > (size-writtenLen)) {
             _size = (size-writtenLen);
         }
-        int ret = _w5500.send(SKT(handle)->fd, (char*)data, (int)_size);
+        ret = _w5500.send(SKT(handle)->fd, (char*)(data+writtenLen), (int)_size);
         if (ret < 0) {
             DBG("returning error -1\n");
             return -1;
@@ -494,6 +495,10 @@ nsapi_size_or_error_t W5500Interface::socket_send(nsapi_socket_t handle, const v
 
 nsapi_size_or_error_t W5500Interface::socket_recv(nsapi_socket_t handle, void *data, nsapi_size_t size)
 {
+    int recved_size = 0;
+    int idx;
+    nsapi_size_or_error_t err;
+
     DBG("fd: %d\n", SKT(handle)->fd);
     // add to cover exception.
     if ((SKT(handle)->fd < 0) || !SKT(handle)->connected) {
@@ -501,19 +506,52 @@ nsapi_size_or_error_t W5500Interface::socket_recv(nsapi_socket_t handle, void *d
     }
     DBG("fd: connected is %d\n", SKT(handle)->connected);
 
-    int _size = _w5500.wait_readable(SKT(handle)->fd, w5500_WAIT_TIMEOUT);
-    DBG("fd: size is %d\n", _size);
+    while(1) {
+        int _size = _w5500.wait_readable(SKT(handle)->fd, w5500_WAIT_TIMEOUT);
+        DBG("fd: _size %d\n", _size);
 
-    if (_size < 0) {
-        return NSAPI_ERROR_WOULD_BLOCK;
+        if (_size < 0) {
+            if(recved_size > 0){
+                err = recved_size;
+                //INFO("recved_size : %d\n",recved_size);
+                break;
+            }
+            return NSAPI_ERROR_WOULD_BLOCK;
+        }
+
+        if (_size > (size - recved_size)) {
+            _size = (size - recved_size);
+        }
+
+        if (_size == 0 && recved_size !=0 )
+            return recved_size;
+
+        err = _w5500.recv(SKT(handle)->fd, (char*)(data + recved_size), (int)_size);
+//	    printf("[TEST 400] : %d\r\n",recved_size);
+//	    for(idx=0; idx<16; idx++)
+//	    {
+//	        printf(" %02x",((uint8_t*)data)[idx+recved_size]);
+//	    }
+//	    printf("\r\n");
+
+        DBG("rv: %d\n", err);
+        //INFO("rv: %d\n",err);
+        recved_size += _size;
     }
 
-    if (_size > size) {
-        _size = size;
-    }
-
-    nsapi_size_or_error_t err = _w5500.recv(SKT(handle)->fd, (char*)data, (int)_size);
-    DBG("rv: %d\n", err);
+//    int _size = _w5500.wait_readable(SKT(handle)->fd, w5500_WAIT_TIMEOUT);
+//    INFO("fd: size is %d\n", _size);
+//
+//    if (_size < 0) {
+//        return NSAPI_ERROR_WOULD_BLOCK;
+//    }
+//
+//    if (_size > size) {
+//        _size = size;
+//    }
+//
+//    nsapi_size_or_error_t err = _w5500.recv(SKT(handle)->fd, (char*)data, (int)_size);
+//    INFO("rv: %d\n", err);
 
 #if w5500_INTF_DBG
     if (err > 0) {

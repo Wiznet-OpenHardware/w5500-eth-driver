@@ -25,7 +25,7 @@
 #define DBG_SPI 0
 
 #if !defined(MBED_CONF_W5500_SPI_SPEED)
-#define MBED_CONF_W5500_SPI_SPEED   100000
+#define MBED_CONF_W5500_SPI_SPEED   18000000
 #endif
 
 
