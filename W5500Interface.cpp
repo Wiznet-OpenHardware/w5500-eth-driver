@@ -21,11 +21,11 @@
 #include "mbed.h"
 #include "W5500Interface.h"
 
-static uint8_t W5500_DEFAULT_TESTMAC[6] = {0x00, 0x08, 0xdc, 0x45, 0x56, 0x67};
+static uint8_t W5500_DEFAULT_TESTMAC[6] = {0x00, 0x08, 0xdc, 0x19, 0x85, 0xa8};
 static int udp_local_port = 0;
 
 #define SKT(h) ((w5500_socket*)h)
-#define w5500_WAIT_TIMEOUT   1500
+#define w5500_WAIT_TIMEOUT   400
 #define w5500_ACCEPT_TIMEOUT 300000 //5 mins timeout, retrun NSAPI_ERROR_WOULD_BLOCK if there is no connection during 5 mins
 
 #define w5500_INTF_DBG 0
@@ -34,6 +34,7 @@ static int udp_local_port = 0;
 #define DBG(...) do{debug("[%s:%d]", __PRETTY_FUNCTION__,__LINE__);debug(__VA_ARGS__);} while(0);
 #else
 #define DBG(...) while(0);
+#define INFO(...) do{debug("[%s:%d]", __PRETTY_FUNCTION__,__LINE__);debug(__VA_ARGS__);} while(0);
 #endif
 
 /**
@@ -50,6 +51,9 @@ W5500Interface::W5500Interface(PinName mosi, PinName miso, PinName sclk, PinName
 {
     ip_set = false;
     _dhcp_enable = true;
+
+//    _w5500.attach(this, &W5500Interface::event);
+    thread_read_socket.start(callback(this, &W5500Interface::socket_check_read));
 }
 
 /*
@@ -171,22 +175,26 @@ int W5500Interface::init(uint8_t * mac, const char* ip, const char* mask, const 
     return 0;
 }
 
-/*
-void W5500Interface::daemon () {
-    for (;;) {
-        for (int i=0; i<MAX_SOCK_NUM ; i++) {
-            if (w5500_sockets[i].fd > 0 && w5500_sockets[i].callback) {
-                int size = _w5500.sreg<uint16_t>(w5500_sockets[i].fd, Sn_RX_RSR);
-                if (size > 0) {
-                    led1 = !led1;
-                    w5500_sockets[i].callback(w5500_sockets[i].callback_data);
-                }
+
+void W5500Interface::socket_check_read()
+{
+    while (1) {
+        for (int i = 0; i < MAX_SOCK_NUM; i++) {
+            _mutex.lock();
+                for (int i=0; i<MAX_SOCK_NUM ; i++) {
+                    if (w5500_sockets[i].fd >= 0 && w5500_sockets[i].callback) {
+                    	int size = _w5500.sreg<uint16_t>(w5500_sockets[i].fd, Sn_RX_RSR);
+                        if (size > 0) {
+                            //led1 = !led1;
+                            w5500_sockets[i].callback(w5500_sockets[i].callback_data);
+                        }
+                    }
             }
+            _mutex.unlock();
         }
-        wait(0.2);
+        wait_ms(1);
     }
 }
-*/
 
 int W5500Interface::IPrenew(int timeout_ms)
 {
@@ -240,21 +248,21 @@ int W5500Interface::disconnect()
 const char *W5500Interface::get_ip_address()
 {
     uint32_t ip = _w5500.reg_rd<uint32_t>(SIPR);
-    snprintf(ip_string, sizeof(ip_string), "%d.%d.%d.%d", (ip>>24)&0xff, (ip>>16)&0xff, (ip>>8)&0xff, ip&0xff);
+    snprintf(ip_string, sizeof(ip_string), "%d.%d.%d.%d", (int)((ip>>24)&0xff), (int)((ip>>16)&0xff), (int)((ip>>8)&0xff), (int)(ip&0xff));
     return ip_string;
 }
 
 const char *W5500Interface::get_netmask()
 {
     uint32_t netmask = _w5500.reg_rd<uint32_t>(SUBR);
-    snprintf(netmask_string, sizeof(netmask_string), "%d.%d.%d.%d", (netmask>>24)&0xff, (netmask>>16)&0xff, (netmask>>8)&0xff, netmask&0xff);
+    snprintf(netmask_string, sizeof(netmask_string), "%d.%d.%d.%d", (int)((netmask>>24)&0xff), (int)((netmask>>16)&0xff), (int)((netmask>>8)&0xff), (int)(netmask&0xff));
     return netmask_string;
 }
 
 const char *W5500Interface::get_gateway()
 {
     uint32_t gateway = _w5500.reg_rd<uint32_t>(GAR);
-    snprintf(gateway_string, sizeof(gateway_string), "%d.%d.%d.%d", (gateway>>24)&0xff, (gateway>>16)&0xff, (gateway>>8)&0xff, gateway&0xff);
+    snprintf(gateway_string, sizeof(gateway_string), "%d.%d.%d.%d", (int)((gateway>>24)&0xff), (int)((gateway>>16)&0xff), (int)((gateway>>8)&0xff), (int)(gateway&0xff));
     return gateway_string;
 }
 
@@ -296,15 +304,16 @@ nsapi_error_t W5500Interface::socket_open(nsapi_socket_t *handle, nsapi_protocol
     return 0;
 }
 
-/*
-void W5500Interface::signal_event(nsapi_socket_t handle)
-{
-    DBG("fd: %d\n", SKT(handle)->fd);
-    if (SKT(handle)->callback != NULL) {
-        SKT(handle)->callback(SKT(handle)->callback_data);
-    }
-}
-*/
+//void W5500Interface::signal_event(nsapi_socket_t handle)
+//{
+////    DBG("fd: %d\n", SKT(handle)->fd);
+////    if (SKT(handle)->callback != NULL) {
+////        SKT(handle)->callback(SKT(handle)->callback_data);
+////    }
+//	if (handle == NULL) return;
+//    w5500_socket *socket = (w5500_socket *)handle;
+//    w5500_sockets[socket->fd].callback(w5500_sockets[socket->fd].callback_data);
+//}
 
 nsapi_error_t W5500Interface::socket_close(nsapi_socket_t handle)
 {
@@ -366,7 +375,9 @@ nsapi_error_t W5500Interface::socket_listen(nsapi_socket_t handle, int backlog)
             return NSAPI_ERROR_NO_SOCKET;
         }
     */
+    _mutex.lock();
     _w5500.scmd(SKT(handle)->fd, LISTEN);
+    _mutex.unlock();
     return 0;
 }
 
@@ -374,7 +385,10 @@ nsapi_size_or_error_t W5500Interface::socket_connect(nsapi_socket_t handle, cons
 {
     DBG("fd: %d\n", SKT(handle)->fd);
     //check for a valid socket
+    _mutex.lock();
+
     if (SKT(handle)->fd < 0) {
+        _mutex.unlock();
         return NSAPI_ERROR_NO_SOCKET;
     }
 
@@ -383,11 +397,13 @@ nsapi_size_or_error_t W5500Interface::socket_connect(nsapi_socket_t handle, cons
 
     //try to connect
     if (!_w5500.connect(SKT(handle)->fd, address.get_ip_address(), address.get_port(), w5500_WAIT_TIMEOUT)) {
+        _mutex.unlock();
         return -1;
     }
 
     //we are now connected
     SKT(handle)->connected = true;
+    _mutex.unlock();
 
     return 0;
 }
@@ -430,7 +446,7 @@ nsapi_error_t W5500Interface::socket_accept(nsapi_socket_t server, nsapi_socket_
     if (address) {
         uint32_t ip = _w5500.sreg<uint32_t>(SKT(*handle)->fd, Sn_DIPR);
         char host[17];
-        snprintf(host, sizeof(host), "%d.%d.%d.%d", (ip>>24)&0xff, (ip>>16)&0xff, (ip>>8)&0xff, ip&0xff);
+        snprintf(host, sizeof(host), "%d.%d.%d.%d", (int)((ip>>24)&0xff), (int)((ip>>16)&0xff), (int)((ip>>8)&0xff), (int)(ip&0xff));
         int port = _w5500.sreg<uint16_t>(SKT(*handle)->fd, Sn_DPORT);
 
         _addr.set_ip_address(host);
@@ -473,11 +489,15 @@ nsapi_error_t W5500Interface::socket_accept(nsapi_socket_t server, nsapi_socket_
 nsapi_size_or_error_t W5500Interface::socket_send(nsapi_socket_t handle, const void *data, nsapi_size_t size)
 {
     DBG("fd: %d\n", SKT(handle)->fd);
-    int writtenLen = 0;
+    //INFO("fd: %d\n", SKT(handle)->fd);
+
+    nsapi_size_t writtenLen = 0;
     int ret;
+    _mutex.lock();
     while (writtenLen < size) {
         int _size =  _w5500.wait_writeable(SKT(handle)->fd, w5500_WAIT_TIMEOUT);
         if (_size < 0) {
+            _mutex.unlock();
             return NSAPI_ERROR_WOULD_BLOCK;
         }
         if (_size > (size-writtenLen)) {
@@ -486,28 +506,34 @@ nsapi_size_or_error_t W5500Interface::socket_send(nsapi_socket_t handle, const v
         ret = _w5500.send(SKT(handle)->fd, (char*)(data+writtenLen), (int)_size);
         if (ret < 0) {
             DBG("returning error -1\n");
+            _mutex.unlock();
             return -1;
         }
         writtenLen += ret;
     }
+    _mutex.unlock();
     return writtenLen;
 }
 
 nsapi_size_or_error_t W5500Interface::socket_recv(nsapi_socket_t handle, void *data, nsapi_size_t size)
 {
     int recved_size = 0;
-    int idx;
+    //int idx;
+    nsapi_size_t _size;
     nsapi_size_or_error_t err;
 
     DBG("fd: %d\n", SKT(handle)->fd);
+    //INFO("fd: %d\n", SKT(handle)->fd);
     // add to cover exception.
+    _mutex.lock();
     if ((SKT(handle)->fd < 0) || !SKT(handle)->connected) {
+        _mutex.unlock();
         return -1;
     }
     DBG("fd: connected is %d\n", SKT(handle)->connected);
 
-    while(1) {
-        int _size = _w5500.wait_readable(SKT(handle)->fd, w5500_WAIT_TIMEOUT);
+     while(1) {
+        _size = _w5500.wait_readable(SKT(handle)->fd, w5500_WAIT_TIMEOUT);
         DBG("fd: _size %d\n", _size);
 
         if (_size < 0) {
@@ -516,6 +542,7 @@ nsapi_size_or_error_t W5500Interface::socket_recv(nsapi_socket_t handle, void *d
                 //INFO("recved_size : %d\n",recved_size);
                 break;
             }
+            _mutex.unlock();
             return NSAPI_ERROR_WOULD_BLOCK;
         }
 
@@ -523,8 +550,11 @@ nsapi_size_or_error_t W5500Interface::socket_recv(nsapi_socket_t handle, void *d
             _size = (size - recved_size);
         }
 
-        if (_size == 0 && recved_size !=0 )
+        if (_size == 0 && recved_size !=0 ){
+            _mutex.unlock();
             return recved_size;
+        }
+
 
         err = _w5500.recv(SKT(handle)->fd, (char*)(data + recved_size), (int)_size);
 //	    printf("[TEST 400] : %d\r\n",recved_size);
@@ -538,20 +568,6 @@ nsapi_size_or_error_t W5500Interface::socket_recv(nsapi_socket_t handle, void *d
         //INFO("rv: %d\n",err);
         recved_size += _size;
     }
-
-//    int _size = _w5500.wait_readable(SKT(handle)->fd, w5500_WAIT_TIMEOUT);
-//    INFO("fd: size is %d\n", _size);
-//
-//    if (_size < 0) {
-//        return NSAPI_ERROR_WOULD_BLOCK;
-//    }
-//
-//    if (_size > size) {
-//        _size = size;
-//    }
-//
-//    nsapi_size_or_error_t err = _w5500.recv(SKT(handle)->fd, (char*)data, (int)_size);
-//    INFO("rv: %d\n", err);
 
 #if w5500_INTF_DBG
     if (err > 0) {
@@ -567,17 +583,20 @@ nsapi_size_or_error_t W5500Interface::socket_recv(nsapi_socket_t handle, void *d
         }
     }
 #endif
+    _mutex.unlock();
     return err;
 }
 
 nsapi_size_or_error_t W5500Interface::socket_sendto(nsapi_socket_t handle, const SocketAddress &address,
         const void *data, nsapi_size_t size)
 {
+    _mutex.lock();
     DBG("fd: %d, ip: %s:%d\n", SKT(handle)->fd, address.get_ip_address(), address.get_port());
     if (_w5500.is_closed(SKT(handle)->fd)) {
         nsapi_error_t err = socket_bind(handle, address);
         if (err < 0 ) {
             DBG("failed to bind socket: %d\n", err);
+            _mutex.unlock();
             return err;
         }
     }
@@ -585,6 +604,7 @@ nsapi_size_or_error_t W5500Interface::socket_sendto(nsapi_socket_t handle, const
     int len = _w5500.wait_writeable(SKT(handle)->fd, w5500_WAIT_TIMEOUT, size-1);
     if (len < 0) {
         DBG("error: NSAPI_ERROR_WOULD_BLOCK\n");
+        _mutex.unlock();
         return NSAPI_ERROR_WOULD_BLOCK;;
     }
 
@@ -610,6 +630,7 @@ nsapi_size_or_error_t W5500Interface::socket_sendto(nsapi_socket_t handle, const
         }
     }
 #endif
+    _mutex.unlock();
     return err;
 }
 
@@ -623,10 +644,12 @@ nsapi_size_or_error_t W5500Interface::socket_recvfrom(nsapi_socket_t handle, Soc
         return -1;
     }
 
+    _mutex.lock();
     uint8_t info[8];
     int len = _w5500.wait_readable(SKT(handle)->fd, w5500_WAIT_TIMEOUT, sizeof(info));
     if (len < 0) {
         DBG("error: NSAPI_ERROR_WOULD_BLOCK\n");
+        _mutex.unlock();
         return NSAPI_ERROR_WOULD_BLOCK;
     }
 
@@ -643,10 +666,11 @@ nsapi_size_or_error_t W5500Interface::socket_recvfrom(nsapi_socket_t handle, Soc
         address->set_port(port);
     }
 
-    int udp_size = info[6]<<8|info[7];
+    nsapi_size_t udp_size = info[6]<<8|info[7];
 
     if (udp_size > (len-sizeof(info))) {
         DBG("error: udp_size > (len-sizeof(info))\n");
+        _mutex.unlock();
         return -1;
     }
 
@@ -668,34 +692,36 @@ nsapi_size_or_error_t W5500Interface::socket_recvfrom(nsapi_socket_t handle, Soc
         }
     }
 #endif
+
+    _mutex.unlock();
     return  err;
 }
 
 void W5500Interface::socket_attach(void *handle, void (*callback)(void *), void *data)
 {
-    /*
-        if (handle == NULL) return;
-        DBG("fd: %d, callback: %p\n", SKT(handle)->fd, callback);
-        SKT(handle)->callback       = callback;
-        SKT(handle)->callback_data  = data;
-    */
+//	if (handle == NULL) return;
+//	DBG("fd: %d, callback: %p\n", SKT(handle)->fd, callback);
+//	SKT(handle)->callback       = callback;
+//	SKT(handle)->callback_data  = data;
+
     if (handle == NULL) return;
+    _mutex.lock();
     w5500_socket *socket = (w5500_socket *)handle;
     w5500_sockets[socket->fd].callback = callback;
+
+
     w5500_sockets[socket->fd].callback_data = data;
+    _mutex.unlock();
 }
 
-/*
 void W5500Interface::event()
 {
     for(int i=0; i<MAX_SOCK_NUM; i++){
         if (w5500_sockets[i].callback) {
-            w5500_sockets[i].callback(w5500_sockets[i].data);
+            w5500_sockets[i].callback(w5500_sockets[i].callback_data);
         }
     }
 }
-*/
-
 
 nsapi_error_t W5500Interface::gethostbyname(const char *host,
         SocketAddress *address, nsapi_version_t version)

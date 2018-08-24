@@ -22,10 +22,12 @@
 
 #include "mbed.h"
 #include "W5500.h"
-//#include "rtos.h"
+#include "rtos.h"
 #include "PinNames.h"
 #include "DHCPClient.h"
 #include "DNSClient.h"
+
+#include "WiFiInterface.h"
  
 // Arduino pin defaults for convenience
 //#if !defined(W5500_SPI_MOSI)
@@ -304,6 +306,9 @@ protected:
 private:
 	WIZnet_Chip _w5500;
 
+	Mutex _mutex;
+	Thread thread_read_socket;
+
     char ip_string[20];
     char netmask_string[20];
     char gateway_string[20];
@@ -313,7 +318,7 @@ private:
     int listen_port;
     
     //void signal_event(nsapi_socket_t handle);
-    //void event();
+    void event();
     
     //w5500 socket management
     struct w5500_socket w5500_sockets[MAX_SOCK_NUM];
@@ -323,10 +328,11 @@ private:
 	DHCPClient dhcp;
 	bool _dhcp_enable;
 	DNSClient  dns;
-/*	
-	Thread *_daemon;
-    void daemon();
-*/
+
+	virtual void socket_check_read();
+
+//	Thread *_daemon;
+//    void daemon();
 
 };
 
